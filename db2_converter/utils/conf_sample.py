@@ -132,20 +132,34 @@ def conf_sample(
             CONFGENX = config[samplopt][confgenx_option]
         log.info(f"ConfGenX variant: {CONFGENX}")
         smifile_to_sdffile(f"{number}.smi", "conformer.TMP.sdf")
+        # HH: remove dont_vary_nitrogens option because nitrogen inversion is not taken care of by the enumeration step
+        #run_external_command(
+        #    f"""{CONFGENX} \
+        #    -profile default \
+        #    -num_conformers {max_conf} -max_num_conformers {max_conf} \
+        #    -auto_increase_threshold 9 -stereo 1 \
+        #    -dont_vary_nitrogens \
+        #    -j {number} -drop_problematic -no_cleanup -WAIT \
+        #    conformer.TMP.sdf
+        #    """
+        #)
         run_external_command(
             f"""{CONFGENX} \
             -profile default \
             -num_conformers {max_conf} -max_num_conformers {max_conf} \
             -auto_increase_threshold 9 -stereo 1 \
-            -dont_vary_nitrogens \
             -j {number} -drop_problematic -no_cleanup -WAIT \
             conformer.TMP.sdf
             """
         )
+        # HH: use structconvert to convert maegz to mol2 in one step
+        #run_external_command(
+        #    f"{SCHUTILS}/structconvert -imae {number}-out.maegz -osd conformer.{number}.sdf"
+        #)
+        #run_external_command(f"{UNICON_EXE} -i conformer.{number}.sdf -o {mol2file}", stderr=subprocess.DEVNULL)
         run_external_command(
-            f"{SCHUTILS}/structconvert -imae {number}-out.maegz -osd conformer.{number}.sdf"
+            f"{SCHUTILS}/structconvert -noarom {number}-out.maegz {mol2file}" 
         )
-        run_external_command(f"{UNICON_EXE} -i conformer.{number}.sdf -o {mol2file}", stderr=subprocess.DEVNULL)
 
     if samplopt == "rdkit":
         one_rdk_params = rdk_params(

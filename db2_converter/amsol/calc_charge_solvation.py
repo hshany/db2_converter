@@ -11,8 +11,9 @@ from db2_converter.amsol.process_amsol_mol2 import process_amsol_mol2
 logger = logging.getLogger("amsol")
 
 
+# HH: reduce amsoltimelimit from 60 to 10
 def calc_charge_solvation(
-    mol2file, amsoltimelimit=60, logger=logger
+    mol2file, amsoltimelimit=10, logger=logger
 ):  # default 1min for each amsol calculation
     AMSOLEXE = config["all"]["AMSOLEXE"]
     OBABELEXE = config["all"]["BABEL_EXE"]

@@ -10,7 +10,7 @@ config = {
         "BABEL_EXE": f"obabel",
         "AMSOLEXE": f"{__file__.split('config.py')[0]}/amsol/amsol7.1_patched",
         "ANTECHAMBER": f"antechamber",
-        "UNICON_EXE": f"unicon"
+        "UNICON_EXE": f"/home/hehuang/soft_shared/unicon/unicon"
     },
     "conformator":{
         "CONF_EXE": f"conformator"
@@ -20,8 +20,8 @@ config = {
         "BCL": f"/your/path/to/bcl-4.2.0-Linux-x86_64/bcl.exe molecule:ConformerGenerator"
     },
     "confgenx":{
-        "CONFGENX": f"/your/path/to/schrodinger2021-2/confgenx",
-        "SCHUTILS": f"/your/path/to/schrodinger2021-2/utilities"
+        "CONFGENX": "/home/hehuang/soft_shared/schrodinger2023-2/confgenx",
+        "SCHUTILS": "/home/hehuang/soft_shared/schrodinger2023-2/utilities"
     },
     "ccdc":{
         "CCDC_PYTHON3": f"/your/path/to/ccdc-software/csd-python-api/miniconda/bin/python3.9",

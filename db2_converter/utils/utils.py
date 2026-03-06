@@ -1,4 +1,5 @@
 import subprocess
+import signal
 import os
 from rdkit import Chem
 import logging
@@ -76,23 +77,64 @@ def update_mol2block_from_mol(mol2block, newmol):
     return startpart + atompart + bondpart + ["\n"]
 
 
-def run_external_command(command_str, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=3600, log=logger): # no external command is expected to run more than 1 hour
+def run_external_command(command_str,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        timeout=3600,
+                        log=None):
+    """
+    Run an external command with a timeout, ensuring the entire process group
+    is killed if any exception occurs during execution or if the process fails.
+    """
+    # Fallback to a default logger if none provided
+    if log is None:
+        import logging
+        log = logging.getLogger(__name__)
+
+    proc = None
     try:
-        result = subprocess.run(
+        # We create a new session so we can kill the entire process group if needed
+        proc = subprocess.Popen(
             command_str,
             stdout=stdout,
             stderr=stderr,
-            timeout=timeout,
             shell=True,
             universal_newlines=True,
+            start_new_session=True
+        )
+
+        out, err = proc.communicate(timeout=timeout)
+        result = subprocess.CompletedProcess(
+            args=command_str,
+            returncode=proc.returncode,
+            stdout=out,
+            stderr=err
         )
         if result.stdout:
             log.debug(result.stdout)
         if result.stderr:
             log.error(result.stderr)
+
         return result
+
     except subprocess.TimeoutExpired as e:
-        log.error(f"Command {command_str} timeout out after {timeout} seconds.")
+        # If the process times out, log an error
+        log.error(f"Command '{command_str}' timed out after {timeout} seconds.")
+        raise
+
+    except Exception as e:
+        # Handle any other exceptions
+        log.error(f"Command '{command_str}' failed with error: {str(e)}")
+        raise
+
+    finally:
+        # Kill the process group only if proc exists and is still running
+        if proc is not None and proc.poll() is None:
+            try:
+                log.info(f'Killing process group {proc.pid}')
+                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+            except Exception as kill_error:
+                log.error(f"Failed to kill process group: {kill_error}")
 
 
 def exist_size(testfile):
