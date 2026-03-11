@@ -10,7 +10,7 @@ config = {
         "BABEL_EXE": f"obabel",
         "AMSOLEXE": f"{__file__.split('config.py')[0]}/amsol/amsol7.1_patched",
         "ANTECHAMBER": f"antechamber",
-        "UNICON_EXE": f"/home/hehuang/soft_shared/unicon/unicon"
+        "UNICON_EXE": f"/home/hehuang/soft_shared/unicon/unicon",
     },
     "conformator":{
         "CONF_EXE": f"conformator"
@@ -80,4 +80,3 @@ def check_UNICON_license():
             logger.error("!!! UNICON license expired. !!!")
     else:
         logger.error("!!! UNICON license expired. !!!")
-

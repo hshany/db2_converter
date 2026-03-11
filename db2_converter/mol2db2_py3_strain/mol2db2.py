@@ -227,6 +227,7 @@ def mol2db2_main(
     db2gzfile,
     clashfile=Path(__file__).parent / "clashfile.txt",
     timeit=False,
+    covalent=False,
     reseth=False,
     rotateh=False,
     selfrigid = []
@@ -236,6 +237,7 @@ def mol2db2_main(
   options.clashfile = clashfile
   options.db2gzfile = db2gzfile
   options.timeit = timeit
+  options.covalent = covalent
   options.reseth = reseth
   options.rotateh = rotateh
   options.selfrigid = selfrigid

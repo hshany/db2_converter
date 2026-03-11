@@ -14,7 +14,7 @@ from copy import deepcopy
 def db2_converter(
     line,
     params,
-    debug=False
+    debug=True # haha
 ):
     workingpath = params["workingpath"]
     outputpath = params["outputpath"]

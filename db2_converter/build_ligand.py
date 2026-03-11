@@ -86,8 +86,9 @@ def main():
     # check parameters availability
     if not check_config_avail(args.samplopt):
         return
-    if not check_UNICON_license():
-        return
+    if args.sampletp:
+        if not check_UNICON_license():
+            return
     # activate ccdc on targeted machine
     if "ccdc" in args.samplopt:
         activate_ccdc()

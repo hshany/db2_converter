@@ -149,6 +149,12 @@ def parse_args(version, header):
         default=False,
         help="Only use the extra fragments as rigid part",
     )
+    rigidbody_group.add_argument(
+        "--covalent",
+        action="store_true",
+        default=False,
+        help="Use Si-centered rigid fragment (Si + heavy atoms within 2 bonds)",
+    )
 
     # Mol2db2 group
     mol2db2_group = parser.add_argument_group("Mol2db2", "Options for mol2db2")

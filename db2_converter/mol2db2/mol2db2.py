@@ -4,6 +4,7 @@
 import time
 import logging
 import subprocess
+from pathlib import Path
 logger = logging.getLogger("mol2db2")
 
 from db2_converter.mol2db2 import mol2
@@ -13,6 +14,7 @@ from db2_converter.mol2db2 import clash
 from db2_converter.mol2db2 import hydrogens
 from db2_converter.mol2db2.hierarchy import TooBigError
 from db2_converter.utils.utils import exist_size
+from db2_converter.utils.rdkit_gen import smifile_to_sdffile
 
 def mol2db2(options):
   '''function that does all the actual work you may want to do to convert a
@@ -165,6 +167,7 @@ def mol2db2_main(
     namefile,
     db2gzfile,
     timeit=False,
+    covalent=False,
     reseth=False,
     rotateh=False,
     selfrigid = []
@@ -175,6 +178,7 @@ def mol2db2_main(
   options.namefile = namefile
   options.db2gzfile = db2gzfile
   options.timeit = timeit
+  options.covalent = covalent
   options.reseth = reseth
   options.rotateh = rotateh
   options.selfrigid = selfrigid
@@ -191,10 +195,14 @@ def mol2db2_to_numhyds(smifile,mol2file="tmp_hyd.mol2",removemol2=True,namefile=
   from db2_converter.config import config
   from db2_converter.utils.utils import run_external_command
   import os
+  tmp_sdf = None
   if not exist_size(mol2file):
     if exist_size(smifile):
+      tmp_sdf = Path(mol2file).with_suffix(".sdf")
+      smifile_to_sdffile(smifile, tmp_sdf)
+      structconvert = os.path.join(config["confgenx"]["SCHUTILS"], "structconvert")
       run_external_command(
-        f'{config["all"]["UNICON_EXE"]} -i "{smifile}" -o "{mol2file}"',
+        f'{structconvert} "{tmp_sdf}" "{mol2file}"',
       )
     else:
       return
@@ -208,6 +216,8 @@ def mol2db2_to_numhyds(smifile,mol2file="tmp_hyd.mol2",removemol2=True,namefile=
   multiplier = 1
   for i in rothydroidxs:
     multiplier *= (len(hydrogenRotAngles[i].split(","))+1)
+  if tmp_sdf and tmp_sdf.exists():
+    os.remove(tmp_sdf)
   if removemol2: os.remove(mol2file)
   return len(rothydroidxs), multiplier # N of terminal rotatable hydrogens
 

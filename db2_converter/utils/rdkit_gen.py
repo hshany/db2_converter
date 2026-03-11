@@ -288,9 +288,12 @@ def dump_conformers_mol2(
                 writer = SDWriter(f"{conf_name}.sdf")
                 writer.write(mol, confId=idx)
                 writer.close()
+                structconvert = os.path.join(
+                    config["confgenx"]["SCHUTILS"], "structconvert"
+                )
                 run_external_command(
-                    f"{config['all']['UNICON_EXE']} -i {conf_name}.sdf -o {conf_name}.mol2",
-                    stderr=subprocess.DEVNULL
+                    f"{structconvert} {conf_name}.sdf {conf_name}.mol2",
+                    stderr=subprocess.DEVNULL,
                 )
                 # convert by template, so no need
                 mol2block = open(f"{conf_name}.mol2").read()

@@ -75,7 +75,7 @@ def conf_sample(
     log=logging,
 ):
     log = logging.getLogger("conformational sampling")
-    UNICON_EXE = config["all"]["UNICON_EXE"]
+    structconvert = os.path.join(config["confgenx"]["SCHUTILS"], "structconvert")
 
     if samplopt == "conformator":
         CONF_EXE = config[samplopt]["CONF_EXE"]
@@ -106,7 +106,10 @@ def conf_sample(
             -cluster
             """
         )
-        run_external_command(f"{UNICON_EXE} -i conformer.{number}.sdf -o {mol2file}", stderr=subprocess.DEVNULL)
+        run_external_command(
+            f"{structconvert} conformer.{number}.sdf {mol2file}",
+            stderr=subprocess.DEVNULL,
+        )
 
     if samplopt == "ccdc":
         CCDC_PYTHON3 = config[samplopt]["CCDC_PYTHON3"]
@@ -123,7 +126,10 @@ def conf_sample(
             --max_unusual_torsions 2"
         # Since we don't have an unlimited license, only one machine in a cluster can be activated simultaneously.
         run_external_command(ccdc_command)
-        run_external_command(f"{UNICON_EXE} -i conformer.{number}.sdf -o {mol2file}", stderr=subprocess.DEVNULL)
+        run_external_command(
+            f"{structconvert} conformer.{number}.sdf {mol2file}",
+            stderr=subprocess.DEVNULL,
+        )
 
     if samplopt == "confgenx":
         CONFGENX = config[samplopt]["CONFGENX"]
@@ -156,7 +162,7 @@ def conf_sample(
         #run_external_command(
         #    f"{SCHUTILS}/structconvert -imae {number}-out.maegz -osd conformer.{number}.sdf"
         #)
-        #run_external_command(f"{UNICON_EXE} -i conformer.{number}.sdf -o {mol2file}", stderr=subprocess.DEVNULL)
+        #run_external_command(f"{structconvert} conformer.{number}.sdf {mol2file}", stderr=subprocess.DEVNULL)
         run_external_command(
             f"{SCHUTILS}/structconvert -noarom {number}-out.maegz {mol2file}" 
         )
@@ -169,9 +175,12 @@ def conf_sample(
 
 
 def rdkit_prep(number, mol2file):
-    UNICON_EXE = config["all"]["UNICON_EXE"]
+    structconvert = os.path.join(config["confgenx"]["SCHUTILS"], "structconvert")
     smifile_to_sdffile(f"{number}.smi", "conformer.TMP.sdf")
-    run_external_command(f"{UNICON_EXE} -i conformer.TMP.sdf -o conformer.TMP.mol2", stderr=subprocess.DEVNULL)
+    run_external_command(
+        f"{structconvert} conformer.TMP.sdf conformer.TMP.mol2",
+        stderr=subprocess.DEVNULL,
+    )
 
     shutil.move("conformer.TMP.mol2", "tmp0.mol2")
     shutil.copy("tmp0.mol2", mol2file)
