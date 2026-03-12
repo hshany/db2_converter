@@ -18,6 +18,11 @@ from db2_converter.utils.utils import (
     run_external_command,
     exist_size,
     raise_errlog,
+    ATOMTYPE,
+)
+from db2_converter.utils.convert import (
+    convert_sdf_to_mol2,
+    restore_dummy_si_in_mol2,
 )
 from db2_converter.utils.fixmol2 import fixmol2_by_template, fixmol2_and_du
 from db2_converter.utils.prepare import prepare, create_namedata
@@ -104,16 +109,32 @@ def write_enumerated_smifile(inlines, outfile, method):
         return faillist
 
 
-def fixmol2_wrapper(inmol2file, outmol2file, templatemol2file="", smiles="", samplopt=""):
+def fixmol2_wrapper(
+    inmol2file,
+    outmol2file,
+    templatemol2file="",
+    smiles="",
+    samplopt="",
+    covalent=False,
+):
     tmp0mol2 = "tmp0.mol2"
+    tmp0mol2_ante = "tmp0.ante.mol2"
     tmp0fixmol2 = "tmp0.mol2.fixed.mol2"
     TMPmol2 = "conformer.TMP.fixed.mol2"
     for i, mol2content in enumerate(next_mol2_lines(inmol2file)):
         with open(f"tmp{i}.mol2", "w") as f:
             f.write("".join(mol2content))
+    si_atoms = {}
+    antechamber_input = tmp0mol2
+    if covalent:
+        si_atoms = _swap_dummy_si_for_antechamber(tmp0mol2, tmp0mol2_ante)
+        if si_atoms:
+            antechamber_input = tmp0mol2_ante
     run_external_command(
-        f"{ANTECHAMBER} -i {tmp0mol2} -fi mol2 -o {tmp0fixmol2} -fo mol2 -at sybyl -pf y"
+        f"{ANTECHAMBER} -i {antechamber_input} -fi mol2 -o {tmp0fixmol2} -fo mol2 -at sybyl -pf y"
     )
+    if covalent and si_atoms and exist_size(tmp0fixmol2):
+        restore_dummy_si_in_mol2(tmp0fixmol2, si_atoms)
     if not templatemol2file:
         if not smiles:
             assert smiles != "", "SMILES is not given to fixmol2"
@@ -130,6 +151,53 @@ def fixmol2_wrapper(inmol2file, outmol2file, templatemol2file="", smiles="", sam
         subprocess.run(f"rm {tmp0fixmol2}", shell=True)
         subprocess.run(f"cat tmp*.mol2 > {outmol2file}", shell=True)
         subprocess.run("rm tmp*", shell=True)
+
+
+def _swap_dummy_si_for_antechamber(inmol2, outmol2):
+    si_atoms = {}
+    mol2blocks = [x for x in next_mol2_lines(inmol2)]
+    if not mol2blocks:
+        shutil.copy(inmol2, outmol2)
+        return si_atoms
+    new_blocks = []
+    for mol2block in mol2blocks:
+        atom_start = mol2block.index("@<TRIPOS>ATOM\n")
+        bond_start = mol2block.index("@<TRIPOS>BOND\n")
+        startpart = mol2block[: atom_start + 1]
+        atompart = mol2block[atom_start + 1 : bond_start]
+        bondpart = mol2block[bond_start:]
+        new_atompart = []
+        for line in atompart:
+            items = line.strip().split()
+            if len(items) < 9:
+                new_atompart.append(line)
+                continue
+            atom_id = int(items[0])
+            atom_name = items[1]
+            atom_type = items[5]
+            if atom_type == "Si" or atom_type.startswith("Si"):
+                si_atoms[atom_id] = atom_name
+                atom_name = f"C{atom_id}"
+                atom_type = "C.3"
+                new_atompart.append(
+                    ATOMTYPE.format(
+                        atom_id,
+                        atom_name,
+                        float(items[2]),
+                        float(items[3]),
+                        float(items[4]),
+                        atom_type,
+                        items[6],
+                        items[7],
+                        float(items[8]),
+                    )
+                )
+            else:
+                new_atompart.append(line)
+        new_blocks.append("".join(startpart + new_atompart + bondpart))
+    with open(outmol2, "w") as f:
+        f.write("".join(new_blocks))
+    return si_atoms
 
 
 def chemistrycheck(insmi, inmol2, outmol2, checkstereo=True):
@@ -223,39 +291,68 @@ def match_and_convert_mol2(
     rotateh=True,
     prefix="output",
     dock38=False,
+    covalent=False,
 ):
     all_blocks = [x for x in next_mol2_lines(mol2file)]
     mol = Chem.MolFromMol2Block("".join(all_blocks[0]), removeHs=False)
+    # Covalent mode uses a Si-centered rigid fragment.
+    if covalent:
+        si_atoms = [atom for atom in mol.GetAtoms() if atom.GetAtomicNum() == 14]
+        if si_atoms:
+            si_idx = si_atoms[0].GetIdx()
+            visited = {si_idx}
+            frontier = {si_idx}
+            for _ in range(2):
+                next_frontier = set()
+                for idx in frontier:
+                    atom = mol.GetAtomWithIdx(idx)
+                    for neighbor in atom.GetNeighbors():
+                        nidx = neighbor.GetIdx()
+                        if nidx not in visited:
+                            visited.add(nidx)
+                            next_frontier.add(nidx)
+                frontier = next_frontier
+            fragsindex = [
+                [idx for idx in sorted(visited) if mol.GetAtomWithIdx(idx).GetAtomicNum() > 1]
+            ]
+        else:
+            logger.warning(">>> Covalent mode enabled but no Si atom found; falling back to ring-based fragments.")
+            fragsindex = []
+    else:
+        fragsindex = []
     # Get atom name to serial number mapping
     index_of_name = dict()
     for atom in mol.GetAtoms():
         name = atom.GetPropsAsDict()["_TriposAtomName"]  # extract O1, C2
         index_of_name[name] = atom.GetIdx()
     # Get break down fragments
-    suitable_ring_frags = mol_to_ring_frags(mol=mol, cutsmarts=sb_smarts, minfragsize=3)
-    fragsindex = []
-    for frag in suitable_ring_frags:
-        findex = []
-        for atom in frag.GetAtoms():
-            if atom.GetAtomicNum() > 1:  # Heavy atoms
-                name = atom.GetPropsAsDict()["_TriposAtomName"]
-                findex.append(index_of_name[name])
-        # Double check to ensure at least 3 heavy atoms in one fragment
-        if len(findex) >= minfragsize:
-            fragsindex.append(findex)
+    if not fragsindex:
+        suitable_ring_frags = mol_to_ring_frags(
+            mol=mol, cutsmarts=sb_smarts, minfragsize=3
+        )
+        for frag in suitable_ring_frags:
+            findex = []
+            for atom in frag.GetAtoms():
+                if atom.GetAtomicNum() > 1:  # Heavy atoms
+                    name = atom.GetPropsAsDict()["_TriposAtomName"]
+                    findex.append(index_of_name[name])
+            # Double check to ensure at least 3 heavy atoms in one fragment
+            if len(findex) >= minfragsize:
+                fragsindex.append(findex)
     # extra rigid fragment #
-    if extra_fragsindex:
-        extra_fragsindex = [extra_fragsindex]
-    if extra_fragsmarts:
-        extra_fragsindex = []
-        for extra_fragindex in mol.GetSubstructMatches(
-            Chem.MolFromSmiles(extra_fragsmarts)
-        ):
-            extra_fragsindex += [list(extra_fragindex)]
-    if extra_fragsindex:  # extra_fragsmarts has higher priority than extra_fragsindex
-        fragsindex += extra_fragsindex
-        if onlyextrafrags:
-            fragsindex = extra_fragsindex
+    if not covalent:
+        if extra_fragsindex:
+            extra_fragsindex = [extra_fragsindex]
+        if extra_fragsmarts:
+            extra_fragsindex = []
+            for extra_fragindex in mol.GetSubstructMatches(
+                Chem.MolFromSmiles(extra_fragsmarts)
+            ):
+                extra_fragsindex += [list(extra_fragindex)]
+        if extra_fragsindex:  # extra_fragsmarts has higher priority than extra_fragsindex
+            fragsindex += extra_fragsindex
+            if onlyextrafrags:
+                fragsindex = extra_fragsindex
     ########################
     if not fragsindex:
         fragsindex = [find_central_rigid(mol)]
@@ -289,9 +386,9 @@ def match_and_convert_mol2(
                     mol_withconfs, confId=conf
                 )  # write different aligned confs into separated sdf files
             writer.close()
-            run_external_command(
-                f"{UNICON_EXE} -i sdf/{prefix}.{i}.sdf -o  mol2/{prefix}.{i}.mol2",
-                stderr=subprocess.STDOUT,
+            convert_sdf_to_mol2(
+                f"sdf/{prefix}.{i}.sdf",
+                f"mol2/{prefix}.{i}.mol2",
             )
             # # if output mol2 has format issue, put fixmol2_wrapper here
             # fixmol2_wrapper(
@@ -409,7 +506,14 @@ def gen_conf(
             continue
 
         try:
-            fixmol2_wrapper(mol2file, fixed_mol2file, "", smi, samplopt)
+            fixmol2_wrapper(
+                mol2file,
+                fixed_mol2file,
+                "",
+                smi,
+                samplopt,
+                covalent=kwargs.get("covalent", False),
+            )
         except Exception as e:
             logger.error(e)
             error = "2fixmol2"
@@ -558,7 +662,8 @@ def gen_conf(
         reseth=reseth,
         rotateh=rotateh,
         prefix="output",
-        dock38=dock38
+        dock38=dock38,
+        covalent=kwargs.get("covalent", False),
     )
     # collect
     if Path("db2").exists():

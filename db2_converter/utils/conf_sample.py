@@ -9,6 +9,7 @@ import logging
 logger = logging.getLogger("db2_converter")
 
 from db2_converter.utils.utils import run_external_command
+from db2_converter.utils.convert import convert_sdf_to_mol2
 from db2_converter.utils.rdkit_gen import smifile_to_sdffile, rdkit_gen
 from db2_converter.config import config
 
@@ -75,8 +76,6 @@ def conf_sample(
     log=logging,
 ):
     log = logging.getLogger("conformational sampling")
-    structconvert = os.path.join(config["confgenx"]["SCHUTILS"], "structconvert")
-
     if samplopt == "conformator":
         CONF_EXE = config[samplopt]["CONF_EXE"]
         run_external_command(
@@ -106,10 +105,7 @@ def conf_sample(
             -cluster
             """
         )
-        run_external_command(
-            f"{structconvert} conformer.{number}.sdf {mol2file}",
-            stderr=subprocess.DEVNULL,
-        )
+        convert_sdf_to_mol2(f"conformer.{number}.sdf", mol2file)
 
     if samplopt == "ccdc":
         CCDC_PYTHON3 = config[samplopt]["CCDC_PYTHON3"]
@@ -126,10 +122,7 @@ def conf_sample(
             --max_unusual_torsions 2"
         # Since we don't have an unlimited license, only one machine in a cluster can be activated simultaneously.
         run_external_command(ccdc_command)
-        run_external_command(
-            f"{structconvert} conformer.{number}.sdf {mol2file}",
-            stderr=subprocess.DEVNULL,
-        )
+        convert_sdf_to_mol2(f"conformer.{number}.sdf", mol2file)
 
     if samplopt == "confgenx":
         CONFGENX = config[samplopt]["CONFGENX"]
@@ -175,12 +168,8 @@ def conf_sample(
 
 
 def rdkit_prep(number, mol2file):
-    structconvert = os.path.join(config["confgenx"]["SCHUTILS"], "structconvert")
     smifile_to_sdffile(f"{number}.smi", "conformer.TMP.sdf")
-    run_external_command(
-        f"{structconvert} conformer.TMP.sdf conformer.TMP.mol2",
-        stderr=subprocess.DEVNULL,
-    )
+    convert_sdf_to_mol2("conformer.TMP.sdf", "conformer.TMP.mol2")
 
     shutil.move("conformer.TMP.mol2", "tmp0.mol2")
     shutil.copy("tmp0.mol2", mol2file)

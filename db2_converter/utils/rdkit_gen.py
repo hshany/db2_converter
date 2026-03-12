@@ -37,6 +37,7 @@ from rdkit.Chem.EnumerateStereoisomers import (
 
 from db2_converter.config import config
 from db2_converter.utils.utils import run_external_command
+from db2_converter.utils.convert import convert_sdf_to_mol2
 
 RD_NAME = "_Name"
 CONF_ENERGY = "Conformer Energy"
@@ -288,13 +289,7 @@ def dump_conformers_mol2(
                 writer = SDWriter(f"{conf_name}.sdf")
                 writer.write(mol, confId=idx)
                 writer.close()
-                structconvert = os.path.join(
-                    config["confgenx"]["SCHUTILS"], "structconvert"
-                )
-                run_external_command(
-                    f"{structconvert} {conf_name}.sdf {conf_name}.mol2",
-                    stderr=subprocess.DEVNULL,
-                )
+                convert_sdf_to_mol2(f"{conf_name}.sdf", f"{conf_name}.mol2")
                 # convert by template, so no need
                 mol2block = open(f"{conf_name}.mol2").read()
                 if template:
@@ -304,7 +299,7 @@ def dump_conformers_mol2(
             except:
                 continue
 
-        log.debug(f">>> Success rate in rdkit UNICON transformation: {count} / {idx+1}")
+        log.debug(f">>> Success rate in rdkit SDF-to-mol2 conversion: {count} / {idx+1}")
 
     os.chdir("..")
     shutil.rmtree(tmpdir, ignore_errors=False)
