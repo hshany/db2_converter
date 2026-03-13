@@ -22,11 +22,14 @@ This document summarizes the end-to-end flow used by the `build_db2.py` / `build
    - For `confgenx`, Schrodinger `confgenx` is run to generate 3D conformers.
    - Output is a multi-conformer mol2 file: `conformer.<ligand>.<samplopt>.mol2`.
 
-5) **Mol2 fixing (antechamber + template)**
-   - `pipeline.fixmol2_wrapper()` runs `antechamber` on `tmp0.mol2` to normalize atom typing.
-   - If `--covalent` is set, the code temporarily swaps dummy `Si` atoms to `C.3` before antechamber and restores `Si` afterward.
-   - A template mol2 is generated and applied to each conformer to normalize types and bonds.
-   - Output: `conformer.<ligand>.<samplopt>.fixed.mol2`.
+5) **Mol2 fixing (antechamber + template)**  
+   - `pipeline.fixmol2_wrapper()` runs `antechamber` on `tmp0.mol2` to normalize atom typing.  
+   - If `--covalent` is set, the code temporarily swaps dummy `Si` atoms to `C.3` before antechamber and restores `Si` afterward.  
+   - The antechamber output is *immediately checked* against the input SMILES via `check_mol2_smi()`.  
+     - If the SMILES check fails or the output is missing, the pipeline **falls back** to the raw `tmp0.mol2` and discards the antechamber output.  
+     - This SMILES check happens **regardless of** the later chemistrycheck/`--checkstereo` setting.  
+   - A template mol2 is generated and applied to each conformer to normalize types and bonds.  
+   - Output: `conformer.<ligand>.<samplopt>.fixed.mol2`.  
 
 6) **Chemistry check (stereo validation)**
    - `pipeline.chemistrycheck()` compares generated mol2 SMILES with the canonical input SMILES.

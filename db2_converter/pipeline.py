@@ -130,27 +130,55 @@ def fixmol2_wrapper(
         si_atoms = _swap_dummy_si_for_antechamber(tmp0mol2, tmp0mol2_ante)
         if si_atoms:
             antechamber_input = tmp0mol2_ante
-    run_external_command(
-        f"{ANTECHAMBER} -i {antechamber_input} -fi mol2 -o {tmp0fixmol2} -fo mol2 -at sybyl -pf y"
+    antechamber_cmd = (
+        f"{ANTECHAMBER} -i {antechamber_input} -fi mol2 "
+        f"-o {tmp0fixmol2} -fo mol2 -at sybyl -pf y"
     )
-    if covalent and si_atoms and exist_size(tmp0fixmol2):
-        restore_dummy_si_in_mol2(tmp0fixmol2, si_atoms)
+    logger.info(">>> Running antechamber: %s", antechamber_cmd)
+    result = run_external_command(antechamber_cmd)
+    restored_tmp0fixmol2 = tmp0fixmol2
+    if exist_size(tmp0fixmol2):
+        antechamber_out = f"{tmp0fixmol2}.ante"
+        shutil.copy(tmp0fixmol2, antechamber_out)
+        if covalent and si_atoms:
+            restored_tmp0fixmol2 = f"{tmp0fixmol2}.restored"
+            shutil.copy(tmp0fixmol2, restored_tmp0fixmol2)
+            restore_dummy_si_in_mol2(restored_tmp0fixmol2, si_atoms)
+    logger.info(
+        ">>> Antechamber exit code: %s; output exists: %s",
+        result.returncode,
+        exist_size(tmp0fixmol2),
+    )
     if not templatemol2file:
         if not smiles:
             assert smiles != "", "SMILES is not given to fixmol2"
-        if not exist_size(tmp0fixmol2) or not check_mol2_smi(tmp0fixmol2, smiles):
+        if exist_size(restored_tmp0fixmol2):
+            # Apply fixes before SMILES validation so nitro/charge cleanup can succeed.
+            fixmol2_and_du(smiles, restored_tmp0fixmol2)
+        check_ok = True
+        if not exist_size(restored_tmp0fixmol2):
+            check_ok = False
+        else:
+            check_ok = check_mol2_smi(restored_tmp0fixmol2, smiles)
+        logger.info(">>> Antechamber mol2 SMILES check: %s", check_ok)
+        if not check_ok:
             # antechamber cannot deal with "[N-]" due to unexpected valence.
+            logger.info(">>> Falling back to raw tmp0.mol2 as template")
             shutil.copy(tmp0mol2, tmp0fixmol2)
-        fixmol2_and_du(smiles, tmp0fixmol2)
-        templatemol2file = tmp0fixmol2
+            restored_tmp0fixmol2 = tmp0fixmol2
+            fixmol2_and_du(smiles, restored_tmp0fixmol2)
+        templatemol2file = restored_tmp0fixmol2
     if samplopt == "rdkit":
         shutil.move(tmp0fixmol2, TMPmol2)
     else:
         for tmpmol2 in sorted(Path(".").glob("tmp*.mol2")):
             fixmol2_by_template(tmpmol2, templatemol2file)
-        subprocess.run(f"rm {tmp0fixmol2}", shell=True)
+        # Keep template file for debugging.
+        # subprocess.run(f"rm {tmp0fixmol2}", shell=True)
         subprocess.run(f"cat tmp*.mol2 > {outmol2file}", shell=True)
-        subprocess.run("rm tmp*", shell=True)
+        # Keep tmp* files for debugging.
+        # subprocess.run("rm tmp*", shell=True)
+    return TMPmol2 if samplopt == "rdkit" else templatemol2file
 
 
 def _swap_dummy_si_for_antechamber(inmol2, outmol2):
@@ -292,6 +320,7 @@ def match_and_convert_mol2(
     prefix="output",
     dock38=False,
     covalent=False,
+    templatemol2file="",
 ):
     all_blocks = [x for x in next_mol2_lines(mol2file)]
     mol = Chem.MolFromMol2Block("".join(all_blocks[0]), removeHs=False)
@@ -390,6 +419,8 @@ def match_and_convert_mol2(
                 f"sdf/{prefix}.{i}.sdf",
                 f"mol2/{prefix}.{i}.mol2",
             )
+            if templatemol2file and exist_size(templatemol2file):
+                fixmol2_by_template(f"mol2/{prefix}.{i}.mol2", templatemol2file)
             # # if output mol2 has format issue, put fixmol2_wrapper here
             # fixmol2_wrapper(
             #     f"mol2/{prefix}.{i}.mol2",
@@ -479,6 +510,7 @@ def gen_conf(
     if len(samplopts) > 1:
         logger.info(f"#### {samplname} ensemble sampling... ####")
 
+    templatemol2file = ""
     for samplopt in samplopts:
         mol2file = f"conformer.{zinc}.{samplopt}.mol2"
         fixed_mol2file = f"conformer.{zinc}.{samplopt}.fixed.mol2"
@@ -506,7 +538,7 @@ def gen_conf(
             continue
 
         try:
-            fixmol2_wrapper(
+            templatemol2file = fixmol2_wrapper(
                 mol2file,
                 fixed_mol2file,
                 "",
@@ -654,6 +686,7 @@ def gen_conf(
     ## ::output: dir mol with separated cluster mol2 file
     ## ::output: dir db2 with separated db2.gz file
     shutil.rmtree("db2", ignore_errors=True)
+    template_for_align = f"{prefix}.mol2"
     db2part_count = match_and_convert_mol2(
         mol2file=fixed_mol2file,
         extra_fragsindex=extra_fragsindex,
@@ -664,6 +697,7 @@ def gen_conf(
         prefix="output",
         dock38=dock38,
         covalent=kwargs.get("covalent", False),
+        templatemol2file=template_for_align,
     )
     # collect
     if Path("db2").exists():
