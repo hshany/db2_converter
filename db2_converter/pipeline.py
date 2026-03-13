@@ -169,7 +169,7 @@ def fixmol2_wrapper(
             fixmol2_and_du(smiles, restored_tmp0fixmol2)
         templatemol2file = restored_tmp0fixmol2
     if samplopt == "rdkit":
-        shutil.move(tmp0fixmol2, TMPmol2)
+        shutil.move(restored_tmp0fixmol2, TMPmol2)
     else:
         for tmpmol2 in sorted(Path(".").glob("tmp*.mol2")):
             fixmol2_by_template(tmpmol2, templatemol2file)
