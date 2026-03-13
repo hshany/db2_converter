@@ -83,9 +83,82 @@ def restore_dummy_si_in_mol2(mol2file, si_atoms):
         f.write("".join(new_blocks))
 
 
-def convert_sdf_to_mol2(insdf, outmol2):
-    structconvert = os.path.join(config["confgenx"]["SCHUTILS"], "structconvert")
-    run_external_command(
-        f"{structconvert} {insdf} {outmol2}",
-        stderr=subprocess.STDOUT,
+def convert_sdf_to_mol2(insdf, outmol2, tool="auto"):
+    """
+    Convert SDF to MOL2 using specified tool.
+
+    Args:
+        insdf: Input SDF file path
+        outmol2: Output MOL2 file path
+        tool: Conversion tool to use. Options:
+            "auto" (default) - Try openbabel first, fallback to schrodinger if fails
+            "openbabel" - Use OpenBabel (free, recommended)
+            "schrodinger" - Use Schrodinger structconvert (requires license)
+
+    Raises:
+        RuntimeError: If conversion fails or no suitable tool available
+    """
+    import logging
+    import shutil
+
+    logger = logging.getLogger("db2_converter")
+
+    # Allow config override of default tool
+    if tool == "auto":
+        tool = config.get("all", {}).get("SDF2MOL2_TOOL", "auto")
+
+    # Try OpenBabel
+    if tool in ("auto", "openbabel"):
+        obabel = shutil.which(config.get("all", {}).get("BABEL_EXE", "obabel"))
+        if obabel:
+            logger.debug(f"Converting {insdf} -> {outmol2} using OpenBabel")
+            result = run_external_command(
+                f"{obabel} -isdf {insdf} -omol2 -O {outmol2}",
+                stderr=subprocess.STDOUT
+            )
+            if result.returncode == 0 and exist_size(outmol2):
+                return
+            else:
+                logger.warning(f"OpenBabel conversion failed (exit code {result.returncode})")
+                if tool == "openbabel":
+                    raise RuntimeError(f"OpenBabel conversion failed for {insdf}")
+                # If auto mode, try schrodinger fallback
+        else:
+            logger.warning("OpenBabel (obabel) not found in PATH")
+            if tool == "openbabel":
+                raise RuntimeError(
+                    "OpenBabel not available. Install via: conda install -c conda-forge openbabel"
+                )
+
+    # Try Schrodinger structconvert
+    if tool in ("auto", "schrodinger"):
+        if "confgenx" in config and "SCHUTILS" in config["confgenx"]:
+            structconvert_path = os.path.join(config["confgenx"]["SCHUTILS"], "structconvert")
+            if exist_size(structconvert_path) or shutil.which("structconvert"):
+                structconvert = structconvert_path if exist_size(structconvert_path) else "structconvert"
+                logger.debug(f"Converting {insdf} -> {outmol2} using Schrodinger structconvert")
+                result = run_external_command(
+                    f"{structconvert} {insdf} {outmol2}",
+                    stderr=subprocess.STDOUT
+                )
+                if result.returncode == 0 and exist_size(outmol2):
+                    return
+                else:
+                    logger.warning(f"structconvert conversion failed (exit code {result.returncode})")
+                    raise RuntimeError(f"Schrodinger structconvert failed for {insdf}")
+            else:
+                logger.warning("Schrodinger structconvert not found")
+
+        if tool == "schrodinger":
+            raise RuntimeError(
+                "Schrodinger structconvert not available. "
+                "Configure SCHUTILS path in config or use tool='openbabel'"
+            )
+
+    # No tool succeeded
+    raise RuntimeError(
+        f"SDF to MOL2 conversion failed for {insdf}.\n"
+        f"Attempted tool: {tool}\n"
+        f"Please install OpenBabel: conda install -c conda-forge openbabel\n"
+        f"Or configure Schrodinger tools in config"
     )

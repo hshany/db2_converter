@@ -15,6 +15,7 @@ from db2_converter.mol2db2 import hydrogens
 from db2_converter.mol2db2.hierarchy import TooBigError
 from db2_converter.utils.utils import exist_size
 from db2_converter.utils.rdkit_gen import smifile_to_sdffile
+from db2_converter.utils.convert import convert_sdf_to_mol2
 
 def mol2db2(options):
   '''function that does all the actual work you may want to do to convert a
@@ -200,10 +201,7 @@ def mol2db2_to_numhyds(smifile,mol2file="tmp_hyd.mol2",removemol2=True,namefile=
     if exist_size(smifile):
       tmp_sdf = Path(mol2file).with_suffix(".sdf")
       smifile_to_sdffile(smifile, tmp_sdf)
-      structconvert = os.path.join(config["confgenx"]["SCHUTILS"], "structconvert")
-      run_external_command(
-        f'{structconvert} "{tmp_sdf}" "{mol2file}"',
-      )
+      convert_sdf_to_mol2(tmp_sdf, mol2file)
     else:
       return
   mol2data = mol2.Mol2(mol2file, nameFileName=namefile)

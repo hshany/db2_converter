@@ -11,6 +11,11 @@ config = {
         "AMSOLEXE": f"{__file__.split('config.py')[0]}/amsol/amsol7.1_patched",
         "ANTECHAMBER": f"antechamber",
         "UNICON_EXE": f"/home/hehuang/soft_shared/unicon/unicon",
+        # SDF to MOL2 conversion tool preference (optional)
+        # Options: "auto" (default - try openbabel, fallback to schrodinger)
+        #          "openbabel" (free, recommended)
+        #          "schrodinger" (requires license)
+        # "SDF2MOL2_TOOL": "auto",
     },
     "conformator":{
         "CONF_EXE": f"conformator"
