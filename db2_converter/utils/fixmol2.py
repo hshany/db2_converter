@@ -347,34 +347,38 @@ def fixmol2_by_template(inpmol2, tempmol2):
     tempfile = tempmol2
     tempblock = [x for x in next_mol2_lines(tempfile)][0]
     mol2file = inpmol2
-    mol2block = [x for x in next_mol2_lines(mol2file)][0]
+    mol2blocks = [x for x in next_mol2_lines(mol2file)]  # Read ALL conformers
     _, Tatompart, Tbondpart = infopart(tempblock)
-    startpart, atompart, bondpart = infopart(mol2block)
-    newatompart = []
-    for i in range(len(atompart)):
-        if (
-            i == 0 or len(atompart[i]) < 70
-        ):  # @<TRIPOS>ATOM and other potential parts, 70 is arbitrary set but could be suitable for most cases
-            newatompart.append(atompart[i])
-        else:
-            linesplit = atompart[i].strip().split()
-            items = Tatompart[i].strip().split()
-            x, y, z = linesplit[2:5]
-            chg = linesplit[-1]
-            newatompart.append(
-                ATOMTYPE.format(
-                    int(items[0]),
-                    items[1],
-                    float(x),
-                    float(y),
-                    float(z),
-                    items[5],
-                    items[6],
-                    items[7],
-                    float(chg),
+
+    # Process each conformer
+    for mol2block in mol2blocks:
+        startpart, atompart, bondpart = infopart(mol2block)
+        newatompart = []
+        for i in range(len(atompart)):
+            if (
+                i == 0 or len(atompart[i]) < 70
+            ):  # @<TRIPOS>ATOM and other potential parts, 70 is arbitrary set but could be suitable for most cases
+                newatompart.append(atompart[i])
+            else:
+                linesplit = atompart[i].strip().split()
+                items = Tatompart[i].strip().split()
+                x, y, z = linesplit[2:5]
+                chg = linesplit[-1]
+                newatompart.append(
+                    ATOMTYPE.format(
+                        int(items[0]),
+                        items[1],
+                        float(x),
+                        float(y),
+                        float(z),
+                        items[5],
+                        items[6],
+                        items[7],
+                        float(chg),
+                    )
                 )
-            )
-    mol2block_fix.append("".join(startpart + newatompart + Tbondpart + ["\n"]))
+        mol2block_fix.append("".join(startpart + newatompart + Tbondpart + ["\n"]))
+
     ### overwrite raw .mol2 file
     with open(mol2file, "w") as f:
         f.write("".join(mol2block_fix))
